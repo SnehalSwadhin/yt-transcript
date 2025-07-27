@@ -1,11 +1,14 @@
 # in database.py
 import sqlite3
+import re
+import numpy as np
 
 DB_NAME = "car_data.db"
 
 def initialize_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
+
     # Table to store scraped car details
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS cars (
@@ -17,6 +20,7 @@ def initialize_db():
         model TEXT,
         variant TEXT,
         price TEXT,
+        price_numeric REAL,
         colour TEXT,
         odometer TEXT,
         year TEXT,
@@ -38,7 +42,8 @@ def initialize_db():
         dealer_contact TEXT,
         dealer_email TEXT,
         dealer_website TEXT,
-        dealer_location TEXT
+        dealer_location TEXT,
+        original_quote TEXT
     )
     ''')
     # Table to track which videos have been processed
@@ -58,14 +63,56 @@ def is_video_processed(video_id):
     conn.close()
     return result is not None
 
+def parse_price(price_str):
+    """
+    Parses a complex price string into a float number.
+    Handles 'lakh', commas, currency symbols, and other text.
+    """
+    # Ensure input is a string and convert to lowercase
+    try:
+        price_str = str(price_str).lower()
+    except:
+        return np.nan # Return NaN for non-string types
+
+    if '%' in price_str or 'discount' in price_str or 'request' in price_str:
+        return np.nan
+    
+    if '/' in price_str:
+        price_str = price_str.split('/')[0]
+    
+    if '-' in price_str:
+        price_str = price_str.split('/')[0]
+
+    # Case 1: The string contains "lakh"
+    if 'lakh' in price_str:
+        # Use regex to find the number (can be float) before "lakh"
+        # \d+ matches digits, \. matches a literal dot. ([\d.]+) captures it.
+        match = re.search(r'([\d.]+)', price_str)
+        if match:
+            value = float(match.group(1))
+            return value * 100000  # 1 lakh = 100,000
+        else:
+            return np.nan # No number found before "lakh"
+
+    # Case 2: Standard number format (with commas, etc.)
+    else:
+        # Use regex to remove all non-digit characters
+        # [^\d] means "any character that is NOT a digit".
+        numeric_part = re.sub(r'[^\d]', '', price_str)
+        if numeric_part:
+            return float(numeric_part)
+        else:
+            return np.nan # Return NaN if no digits are found
+
 def add_cars_to_db(car_list):
     # car_list is the list of dicts from your LLM
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     for car in car_list:
+        price_raw = car.get('Price', None)
         cursor.execute('''
-        INSERT INTO cars (timestamp, video_id, published_at, car_oem, model, variant, price, colour, odometer, year, service_record, frame_type, transmission_type, fuel_type, num_owners, rto, city, engine_details, feature_details, rating, start_timestamp, video_link, video_title, channel_title, dealer_name, dealer_contact, dealer_email, dealer_website, dealer_location)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO cars (timestamp, video_id, published_at, car_oem, model, variant, price, price_numeric, colour, odometer, year, service_record, frame_type, transmission_type, fuel_type, num_owners, rto, city, engine_details, feature_details, rating, start_timestamp, video_link, video_title, channel_title, dealer_name, dealer_contact, dealer_email, dealer_website, dealer_location, original_quote)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             car.get('timestamp', None),
             car.get('video_id', None),
@@ -73,7 +120,8 @@ def add_cars_to_db(car_list):
             car.get('OEM', None),
             car.get('Model', None),
             car.get('Variant', None),
-            car.get('Price', None),
+            price_raw,
+            parse_price(price_raw),
             car.get('Colour', None),
             car.get('Odometer', None),
             car.get('Year', None),
@@ -95,8 +143,10 @@ def add_cars_to_db(car_list):
             car.get('dealer_contact', None),
             car.get('dealer_email', None),
             car.get('dealer_website', None),
-            car.get('dealer_location', None)
+            car.get('dealer_location', None),
+            car.get('original_quote', None)
         ))
+        
     # Mark the video as processed
     if car_list:
         video_id = car_list[0].get('video_id')

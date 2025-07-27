@@ -1,28 +1,26 @@
 import pandas as pd
-from youtubesearchpython import VideosSearch
 from youtube_transcript_api._api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
 import openai
+import ollama
+from groq import Groq
+from google import genai
+from google.genai import types
 import os, re, io, json
 from dotenv import load_dotenv
 from logger import log
 from thefuzz import fuzz
-from youtubesearchpython import VideosSearch
 from database import initialize_db, is_video_processed, add_cars_to_db
 from googleapiclient.discovery import build
 from datetime import datetime, timedelta, timezone
 
-
 load_dotenv()
-api_key = os.getenv("OPENAI_API_KEY")
-if not api_key:
-    raise ValueError("OPENAI_API_KEY environment variable not set! Please create a .env file.")
-openai.api_key = api_key
-
+DAILY_VIDEOS_LIMIT = 1
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 if not YOUTUBE_API_KEY:
     raise ValueError("YOUTUBE_API_KEY environment variable not set! Please create a .env file.")
 youtube_api = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
+llm_tool = None
 
 # Define the two prompts in our chain
 prompt_1_template = """You are an expert data extractor. Your task is to read the following transcript, which could be in any language, and produce a summary **in English**.
@@ -32,7 +30,8 @@ The summary must follow these specific rules:
 2. For each vehicle, create a primary bullet point using its name (e.g., "* 2024 Hyundai Creta").
 3. Under each primary bullet point, create a nested list of all its specifications.
 4. Each specification in the nested list must use the format "Attribute: Value" (e.g., "- Price: ₹7.5 lakh", "- Color: Blue:").
-5. Add a final bullet point for "original_quote": A SHORT, unique, and EXACT quote from the original transcript that clearly identifies this specific car. **This quote MUST be in the original language of the transcript. and MUST be continuous**
+5. Note that the "Price" attribute should be a numerical value
+6. Add a final bullet point for "original_quote": A SHORT, unique, and EXACT quote from the original transcript that clearly identifies this specific car. **This quote MUST be in the original language of the transcript. and MUST be continuous**
 
 ---
 Transcript to process:
@@ -47,6 +46,8 @@ OEM | Model | Variant | Price | Colour | Odo | Year | Service record | Frame typ
 - If a piece of data is not available for a specific car, just put NA.
 - The output should be a clean markdown table and nothing else.
 - Add a final column "original_quote" mentioned in the summary
+- Convert the "Price" column to a single numeric value (e.g., ₹7.5 lakh should be converted to 750000).
+- If there are no cars mentioned, do not output a table.
 ---
 Summary:
 {summary}
@@ -69,24 +70,120 @@ Here is the text to analyze:
 ---
 """
 
+class LLMTool:
+    """Handles all interactions with the Language Model API (OpenAI)."""
+
+    def __init__(self, llm_model='gemini-pro'):
+        """Initializes the LLM client."""
+        self.llm_model = llm_model.lower()
+        if self.llm_model == 'gemini-flash' or llm_model == 'gemini-pro':
+            api_key = os.getenv("GOOGLE_API_KEY")
+            if not api_key:
+                raise ValueError("GOOGLE_API_KEY not found in environment variables.")
+            self.gemini_client = genai.Client(api_key=api_key)
+        elif self.llm_model == 'openai':
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY not found in environment variables.")
+            self.openai_client = openai.OpenAI(api_key=api_key)
+        elif self.llm_model == 'groq':
+            api_key = os.getenv("GROQ_API_KEY")
+            if not api_key:
+                raise ValueError("GROQ_API_KEY not found in environment variables.")
+            self.groq_client = Groq(api_key=api_key)
+
+        log.info(f"LLMTool: {self.llm_model} client initialized.")
+        
+    from typing import Optional
+
+    def _make_request(self, system_prompt: str, user_prompt: str, is_json: bool = False, thinking_mode: bool = False, model: Optional[str] = None) -> str:
+        """A private helper to make a generic chat completion request."""
+        result = None
+        selected_model = model if model else self.llm_model
+        log.info(f"Making request to {selected_model} model with thinking mode: {thinking_mode}")
+        try:
+            if selected_model == "openai":
+                response_1 = self.openai_client.chat.completions.create(
+                    model="o4-mini", # Using a more advanced model can yield better results
+                    reasoning_effort="medium" if thinking_mode else None,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    response_format={"type": "json_object"} if is_json else {"type": "text"}
+                )
+                result = response_1.choices[0].message.content
+            elif selected_model == "gemini-pro":
+                response = self.gemini_client.models.generate_content(
+                    model="gemini-2.5-pro",
+                    contents=user_prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_prompt,
+                        response_mime_type="application/json" if is_json else "text/plain",
+                        thinking_config=types.ThinkingConfig(
+                            thinking_budget=-1
+                        )
+                    ),
+                )
+                result = response.text
+            elif selected_model == "gemini-flash":
+                response = self.gemini_client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=user_prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_prompt,
+                        response_mime_type="application/json" if is_json else "text/plain",
+                        thinking_config=types.ThinkingConfig(
+                            thinking_budget=-1 if thinking_mode else 0,  # -1 for unlimited thinking time, 0 for no thinking
+                        )
+                    ),
+                )
+                result = response.text
+            elif selected_model == "ollama":
+                response = ollama.chat(
+                    model="llama3.2:latest",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ], 
+                    think=thinking_mode,
+                    format="json" if is_json else None,
+                    # options={       # Optional: Adjust generation parameters if needed
+                    #     'temperature': 0.2,
+                    #     # 'num_predict': 1024 # Limit output length if necessary
+                    # }
+                )
+                result = response['message']['content'].strip()
+            elif selected_model == "groq":
+                response = self.groq_client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    reasoning_effort="default" if thinking_mode else "none",
+                    response_format={"type": "json_object"} if is_json else {"type": "text"}
+                )
+                result = response.choices[0].message.content
+            else:
+                raise ValueError(f"Unsupported LLM model: {self.llm_model}")
+            return result if result else "<No response from LLM>"
+        except Exception as e:
+            log.error(f"Error calling OpenAI API: {e}")
+            return "<No response from LLM>"
+
 def run_prompt_chain_openai(transcript):
     """
     Executes the two-step prompt chain to extract and structure car information.
     """
+    if not llm_tool:
+        raise ValueError("LLMTool is not initialized.")
     log.info("--- Step 1: Kicking off the first prompt (Summarization) ---")
-    
     # Format the first prompt with the transcript
-    prompt_1 = prompt_1_template.format(transcript=transcript)
-    
-    # Call the LLM for the first time
-    response_1 = openai.chat.completions.create(
-        model="o4-mini", # Using a more advanced model can yield better results
-        messages=[
-            {"role": "system", "content": "You are an expert assistant skilled at summarizing technical specifications from text."},
-            {"role": "user", "content": prompt_1}
-        ]
+    summary = llm_tool._make_request(
+        system_prompt="You are an expert assistant skilled at summarizing technical specifications from text.",
+        user_prompt=prompt_1_template.format(transcript=transcript)
     )
-    summary = response_1.choices[0].message.content
     
     log.info("\n✅ Intermediate Summary from Prompt 1:\n")
     log.info(summary)
@@ -94,17 +191,11 @@ def run_prompt_chain_openai(transcript):
     log.info("\n--- Step 2: Kicking off the second prompt (Structuring) ---")
     
     # Format the second prompt with the summary from the first call
-    prompt_2 = prompt_2_template.format(summary=summary)
-
-    # Call the LLM for the second time
-    response_2 = openai.chat.completions.create(
-        model="o4-mini",
-        messages=[
-            {"role": "system", "content": "You are a data formatting assistant. Your job is to convert text into clean markdown tables."},
-            {"role": "user", "content": prompt_2}
-        ]
+    structured_data_string = llm_tool._make_request(
+        system_prompt="You are an expert data formatter. Your job is to convert text into clean markdown tables.",
+        user_prompt=prompt_2_template.format(summary=summary),
+        model="gemini-flash"
     )
-    structured_data_string = response_2.choices[0].message.content
     
     log.info("\n✅ Structured Markdown Table from Prompt 2:\n")
     log.info(structured_data_string)
@@ -266,18 +357,15 @@ def create_contact_corpus(structured_transcript, description, num_chunks=25):
     return corpus
 
 def extract_dealer_details(contact_corpus):
-    prompt = prompt_3_template.format(contact_corpus=contact_corpus)
-    
-    # Call the LLM for the first time
-    response = openai.chat.completions.create(
-        model="gpt-3.5-turbo-1106", # Using a more advanced model can yield better results
-        response_format={"type": "json_object"}, 
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant designed to output JSON. Your task is to extract dealer details from the provided text."},
-            {"role": "user", "content": prompt}
-        ]
+    if not llm_tool:
+        raise ValueError("LLMTool is not initialized.")
+    log.info("--- Step 1: Kicking off the first prompt (Summarization) ---")
+    response_content = llm_tool._make_request(
+        system_prompt="You are a helpful assistant designed to output JSON. Your task is to extract dealer details from the provided text.",
+        user_prompt=prompt_3_template.format(contact_corpus=contact_corpus),
+        is_json=True
     )
-    response_content = response.choices[0].message.content
+
     try:
         # We can directly parse it without any cleaning
         if response_content:
@@ -301,9 +389,10 @@ def run_full_scrape_pipeline_for_video(video):
     log.info(f"Starting transcript extraction for video ID: {video_id}")
 
     try:
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        transcript_list = YouTubeTranscriptApi().list(video_id=video_id)
         for transcript in transcript_list:
-            transcript_type = "Auto-Generated"
+            transcript_type = "Auto-Generated" if transcript.is_generated else "Manually Created"
+            log.info(f"Processing transcript: {transcript.language} ({transcript.language_code})")
             fetchhed = transcript.fetch()
             transcript_text = " ".join(segment.text for segment in fetchhed)
             log.info(
@@ -316,15 +405,22 @@ def run_full_scrape_pipeline_for_video(video):
                 break
     except TranscriptsDisabled:
         log.warning(f"Transcripts are disabled for video ID: {video_id}")
+        return None
     except NoTranscriptFound:
         log.warning(f"No transcripts could be found for video ID: {video_id}")
+        return None
     except Exception as e:
         log.error(f"An error occurred: {e}")
+        return None
     
     markdown_output = run_prompt_chain_openai(transcript_text)
 
     if markdown_output is not None:
         df = parse_markdown_to_dataframe(markdown_output)
+        df = df.replace(r'^\s*(n/a|nan|null|na|NA|NaN|Null|N/a|N/A)\s*$', None, regex=True)
+        if df.empty or df['OEM'][0] == None:
+            log.warning("No data was extracted from the markdown output.")
+            return None
         df[['start_timestamp', 'video_link']] = df.apply(lambda x: find_original_quote_in_transcript(x['original_quote'], structured_transcript, video_id), axis=1, result_type="expand")
         df['video_id'] = video['id']
         df['video_title'] = video['title']
@@ -371,13 +467,38 @@ def search_recent_videos(query, days=1):
             part='snippet',      # 'snippet' includes title, description, publishedAt, etc.
             type='video',        # We only want videos, not channels or playlists
             order='date',        # Order by date to get the most recent ones first
-            maxResults=5,       # Get up to 5 results (the max per page)
-            publishedAfter=published_after_str
+            maxResults=DAILY_VIDEOS_LIMIT+10,       # Get up to 5 results (the max per page)
+            publishedAfter=published_after_str,
+            videoDuration='long'
         )
         
         response = request.execute()
         
         videos = []
+        for item in response.get('items', []):
+            video_id = item['id']['videoId']
+            snippet = item['snippet']
+            
+            videos.append({
+                'id': video_id,
+                'title': snippet['title'],
+                'published_at': snippet['publishedAt'],
+                'description': snippet['description'],
+                'channel_title': snippet['channelTitle']
+            })
+        
+        request = youtube_api.search().list(
+            q=query,
+            part='snippet',      # 'snippet' includes title, description, publishedAt, etc.
+            type='video',        # We only want videos, not channels or playlists
+            order='date',        # Order by date to get the most recent ones first
+            maxResults=DAILY_VIDEOS_LIMIT,       # Get up to 5 results (the max per page)
+            publishedAfter=published_after_str,
+            videoDuration='medium'
+        )
+        
+        response = request.execute()
+
         for item in response.get('items', []):
             video_id = item['id']['videoId']
             snippet = item['snippet']
@@ -405,6 +526,9 @@ def main():
         log.critical(f"FATAL: Could not initialize database. Aborting run. Error: {e}")
         return # Stop execution if the database can't be set up
     
+    global llm_tool
+    llm_tool = LLMTool(llm_model='gemini-pro')
+
     log.info("--- Starting Daily YouTube Car Search ---")
 
     recent_videos = search_recent_videos(query="2nd hand cars bangalore", days=1)
@@ -413,7 +537,8 @@ def main():
         log.info("No new videos found in the last day.")
     else:
         log.info(f"Found {len(recent_videos)} new videos to process.")
-        
+    
+    processed_videos = 0
     for video in recent_videos:
         if is_video_processed(video['id']):
             log.info(f"Skipping already processed video: {video['id']}")
@@ -426,6 +551,10 @@ def main():
         if df is not None and not df.empty:
             add_cars_to_db(df.to_dict(orient='records'))
             log.info(f"Added {len(df)} cars from video {video['id']} to the database.")
+            processed_videos += 1
+            if processed_videos >= DAILY_VIDEOS_LIMIT:
+                log.info(f"Reached daily limit of {DAILY_VIDEOS_LIMIT} videos processed.")
+                break # Stop after processing the daily limit
         else:
             log.warning(f"No data was scraped for video ID {video['id']}")
     

@@ -1,0 +1,11 @@
+google_api_python_client==2.177.0
+groq==0.30.0
+numpy==2.3.2
+ollama==0.5.1
+openai==1.97.1
+pandas==2.3.1
+protobuf==6.31.1
+python-dotenv==1.1.1
+streamlit==1.47.1
+thefuzz==0.22.1
+youtube_transcript_api==1.2.1
