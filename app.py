@@ -3,11 +3,14 @@ import pandas as pd
 import libsql
 import os
 import dotenv
+from database import initialize_db
 
 dotenv.load_dotenv()
 
 DB_URL = os.environ.get("TURSO_DATABASE_URL")
 DB_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
+
+initialize_db()
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -27,9 +30,9 @@ def load_data(db_path):
         st.stop()
         
     try:
-        conn = libsql.connect("local.db", sync_url=DB_URL, auth_token=DB_TOKEN)
         # Use a SQL query to select all data from the 'cars' table
-        query = "SELECT * FROM cars WHERE published_at > datetime('now', '-30 days');"
+        conn = libsql.connect("local.db", sync_url=DB_URL, auth_token=DB_TOKEN)
+        query = "SELECT * FROM cars WHERE published_at > datetime('now', '-30 days')"
         df = pd.read_sql_query(query, conn)
         conn.close()
         
