@@ -441,11 +441,11 @@ def run_full_scrape_pipeline_for_video(video):
         if contact_corpus:
             dealer_info = extract_dealer_details(contact_corpus)
             if dealer_info:
-                df['dealer_name'] = dealer_info.get('dealer_name', 'Unknown')
-                df['dealer_contact'] = dealer_info.get('dealer_contact', 'Unknown')
-                df['dealer_email'] = dealer_info.get('dealer_email', 'Unknown')
-                df['dealer_website'] = dealer_info.get('dealer_website', 'Unknown')
-                df['dealer_location'] = dealer_info.get('dealer_location', 'Unknown')
+                df['dealer_name'] = str(dealer_info.get('dealer_name', 'Unknown'))
+                df['dealer_contact'] = str(dealer_info.get('dealer_contact', 'Unknown'))
+                df['dealer_email'] = str(dealer_info.get('dealer_email', 'Unknown'))
+                df['dealer_website'] = str(dealer_info.get('dealer_website', 'Unknown'))
+                df['dealer_location'] = str(dealer_info.get('dealer_location', 'Unknown'))
             else:
                 log.warning("No dealer information extracted.")
                 df[['dealer_name', 'dealer_contact', 'dealer_email', 'dealer_website', 'dealer_location']] = None
