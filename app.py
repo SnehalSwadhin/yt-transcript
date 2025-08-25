@@ -24,11 +24,6 @@ st.set_page_config(
 @st.cache_data
 def load_data(db_path):
     """Loads car data from the SQLite database."""
-    if not os.path.exists(db_path):
-        st.error(f"Database file not found at {db_path}")
-        st.info("Please make sure the `car_data.db` file is in the same directory as the app.")
-        st.stop()
-        
     try:
         # Use a SQL query to select all data from the 'cars' table
         conn = libsql.connect("local.db", sync_url=DB_URL, auth_token=DB_TOKEN)
