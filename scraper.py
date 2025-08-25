@@ -1,6 +1,7 @@
 import pandas as pd
 from youtube_transcript_api._api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
+from youtube_transcript_api.proxies import WebshareProxyConfig
 import openai
 import ollama
 from groq import Groq
@@ -21,6 +22,8 @@ if not YOUTUBE_API_KEY:
     raise ValueError("YOUTUBE_API_KEY environment variable not set! Please create a .env file.")
 youtube_api = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
 llm_tool = None
+proxy_username = os.getenv("WEBSHARE_PROXY_USERNAME")
+proxy_password = os.getenv("WEBSHARE_PROXY_PASSWORD")
 
 # Define the two prompts in our chain
 prompt_1_template = """You are an expert data extractor. Your task is to read the following transcript, which could be in any language, and produce a summary **in English**.
@@ -389,7 +392,13 @@ def run_full_scrape_pipeline_for_video(video):
     log.info(f"Starting transcript extraction for video ID: {video_id}")
 
     try:
-        transcript_list = YouTubeTranscriptApi().list(video_id=video_id)
+        if proxy_username == None or proxy_password == None:
+            log.warning("Proxy credentials not found. Proceeding without proxy.")
+            return None
+        transcript_list = YouTubeTranscriptApi(proxy_config=WebshareProxyConfig(
+            proxy_username=proxy_username,
+            proxy_password=proxy_password,
+        )).list(video_id=video_id)
         for transcript in transcript_list:
             transcript_type = "Auto-Generated" if transcript.is_generated else "Manually Created"
             log.info(f"Processing transcript: {transcript.language} ({transcript.language_code})")
