@@ -1,12 +1,22 @@
 # in database.py
 import sqlite3
+import libsql
 import re
 import numpy as np
+import os
+import dotenv
+from logger import log
 
-DB_NAME = "car_data.db"
+dotenv.load_dotenv()
+
+DB_URL = os.environ.get("TURSO_DATABASE_URL")
+DB_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
+
 
 def initialize_db():
-    conn = sqlite3.connect(DB_NAME)
+    log.info("Initializing the database...")
+    conn = libsql.connect("local.db", sync_url=DB_URL, auth_token=DB_TOKEN)
+    log.info("Connected to the database successfully.")
     cursor = conn.cursor()
 
     # Table to store scraped car details
@@ -53,10 +63,11 @@ def initialize_db():
     )
     ''')
     conn.commit()
+    conn.sync()
     conn.close()
 
 def is_video_processed(video_id):
-    conn = sqlite3.connect(DB_NAME)
+    conn = libsql.connect("local.db", sync_url=DB_URL, auth_token=DB_TOKEN)
     cursor = conn.cursor()
     cursor.execute("SELECT video_id FROM processed_videos WHERE video_id = ?", (video_id,))
     result = cursor.fetchone()
@@ -106,7 +117,7 @@ def parse_price(price_str):
 
 def add_cars_to_db(car_list):
     # car_list is the list of dicts from your LLM
-    conn = sqlite3.connect(DB_NAME)
+    conn = libsql.connect("local.db", sync_url=DB_URL, auth_token=DB_TOKEN)
     cursor = conn.cursor()
     for car in car_list:
         price_raw = car.get('Price', None)
@@ -152,4 +163,5 @@ def add_cars_to_db(car_list):
         video_id = car_list[0].get('video_id')
         cursor.execute("INSERT OR IGNORE INTO processed_videos (video_id) VALUES (?)", (video_id,))
     conn.commit()
+    conn.sync()
     conn.close()

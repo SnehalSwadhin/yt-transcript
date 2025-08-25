@@ -11,6 +11,9 @@ __pycache__/
 *.sqlite
 *.db
 *.db-journal
+*.db-info
+*.db-shm
+*.db-wal
 
 # Distribution / packaging
 .Python
