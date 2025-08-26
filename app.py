@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import libsql
 import os
@@ -10,7 +11,24 @@ dotenv.load_dotenv()
 DB_URL = os.environ.get("TURSO_DATABASE_URL")
 DB_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
 
+GA_ID = os.environ.get("GA_MEASUREMENT_ID")  # Replace with your actual Measurement ID
+
+GA_SCRIPT = f"""<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id={GA_ID}"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){{dataLayer.push(arguments);}}
+  gtag('js', new Date());
+
+  gtag('config', '{GA_ID}');
+</script>"""
+
+def inject_ga():
+    """Injects the Google Analytics script into the Streamlit app's HTML."""
+    components.html(GA_SCRIPT, height=0)
+
 initialize_db()
+inject_ga()
 
 # --- Page Configuration ---
 st.set_page_config(
