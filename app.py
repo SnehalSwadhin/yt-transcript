@@ -16,7 +16,8 @@ initialize_db()
 st.set_page_config(
     page_title="Bangalore Second Hand Cars",
     page_icon="🚗",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # --- Data Loading and Caching ---
