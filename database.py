@@ -121,41 +121,45 @@ def add_cars_to_db(car_list):
     cursor = conn.cursor()
     for car in car_list:
         price_raw = car.get('Price', None)
+        price_numeric = parse_price(price_raw)
+        # Set price_numeric to 0 if it's NaN or None
+        if np.isnan(price_numeric) or price_numeric is None:
+            price_numeric = 0
         cursor.execute('''
         INSERT INTO cars (timestamp, video_id, published_at, car_oem, model, variant, price, price_numeric, colour, odometer, year, service_record, frame_type, transmission_type, fuel_type, num_owners, rto, city, engine_details, feature_details, rating, start_timestamp, video_link, video_title, channel_title, dealer_name, dealer_contact, dealer_email, dealer_website, dealer_location, original_quote)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
-            car.get('timestamp', None),
-            car.get('video_id', None),
-            car.get('published_at', None),
-            car.get('OEM', None),
-            car.get('Model', None),
-            car.get('Variant', None),
-            price_raw,
-            parse_price(price_raw),
-            car.get('Colour', None),
-            car.get('Odometer', None),
-            car.get('Year', None),
-            car.get('Service Record', None),
-            car.get('Frame Type', None),
-            car.get('Transmission Type', None),
-            car.get('Fuel Type', None),
-            car.get('Number of owners', None),
-            car.get('RTO', None),
-            car.get('City', None),
-            car.get('Engine Details', None),
-            car.get('Feature Details', None),
-            car.get('Rating', None),
-            car.get('start_timestamp', None),
-            car.get('video_link', None),
-            car.get('video_title', None),
-            car.get('channel_title', None),
-            car.get('dealer_name', None),
-            car.get('dealer_contact', None),
-            car.get('dealer_email', None),
-            car.get('dealer_website', None),
-            car.get('dealer_location', None),
-            car.get('original_quote', None)
+            car.get('timestamp', ''),
+            car.get('video_id', ''),
+            car.get('published_at', ''),
+            car.get('OEM', ''),
+            car.get('Model', ''),
+            car.get('Variant', ''),
+            price_raw or '',
+            price_numeric,
+            car.get('Colour', ''),
+            car.get('Odometer', ''),
+            car.get('Year', ''),
+            car.get('Service Record', ''),
+            car.get('Frame Type', ''),
+            car.get('Transmission Type', ''),
+            car.get('Fuel Type', ''),
+            car.get('Number of owners', ''),
+            car.get('RTO', ''),
+            car.get('City', ''),
+            car.get('Engine Details', ''),
+            car.get('Feature Details', ''),
+            car.get('Rating', ''),
+            car.get('start_timestamp', ''),
+            car.get('video_link', ''),
+            car.get('video_title', ''),
+            car.get('channel_title', ''),
+            car.get('dealer_name', ''),
+            car.get('dealer_contact', ''),
+            car.get('dealer_email', ''),
+            car.get('dealer_website', ''),
+            car.get('dealer_location', ''),
+            car.get('original_quote', '')
         ))
         
     # Mark the video as processed

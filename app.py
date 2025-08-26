@@ -151,70 +151,114 @@ st.markdown("---")
 if filtered_df.empty:
     st.warning("No cars found. Try adjusting the filters!")
 else:
-    for video_id in unique_video_ids:
-        # Get all rows (cars) that belong to the current video
-        video_cars_df = filtered_df[filtered_df['video_id'] == video_id].copy()
+    # for video_id in unique_video_ids:
+    #     # Get all rows (cars) that belong to the current video
+    #     video_cars_df = filtered_df[filtered_df['video_id'] == video_id].copy()
         
-        # Get common information from the first car in the group
-        # (assuming dealer and date are the same for all cars in one video)
-        first_car = video_cars_df.iloc[0]
-        dealer_name = first_car['dealer_name']
-        dealer_location = first_car['dealer_location']
-        dealer_contact = first_car['dealer_contact']
-        dealer_email = first_car['dealer_email']
-        dealer_website = first_car['dealer_email']
+    #     # Get common information from the first car in the group
+    #     # (assuming dealer and date are the same for all cars in one video)
+    #     first_car = video_cars_df.iloc[0]
+    #     dealer_name = first_car['dealer_name']
+    #     dealer_location = first_car['dealer_location']
+    #     dealer_contact = first_car['dealer_contact']
+    #     dealer_email = first_car['dealer_email']
+    #     dealer_website = first_car['dealer_email']
 
-        video_cars_df['price_lakhs'] = video_cars_df['price_numeric'] / 100000.0
-        video_cars_df['price_lakhs'] = video_cars_df['price_lakhs'].apply(lambda x: f"₹{x:.2f} Lakhs" if x >= 0.1 else "N/A")
-        video_cars_df = video_cars_df[['car_oem', 'model', 'variant', 'price_lakhs', 'colour', 'odometer', 'year', 'service_record', 'frame_type', 'transmission_type', 'fuel_type', 'num_owners', 'rto', 'city', 'engine_details', 'feature_details', 'rating', 'start_timestamp', 'video_link', 'price']]
-        video_cars_df = video_cars_df.dropna(axis=1, how='all')
+    #     video_cars_df['price_lakhs'] = video_cars_df['price_numeric'] / 100000.0
+    #     video_cars_df['price_lakhs'] = video_cars_df['price_lakhs'].apply(lambda x: f"₹{x:.2f} Lakhs" if x >= 0.1 else "N/A")
+    #     video_cars_df = video_cars_df[['car_oem', 'model', 'variant', 'price_lakhs', 'colour', 'odometer', 'year', 'service_record', 'frame_type', 'transmission_type', 'fuel_type', 'num_owners', 'rto', 'city', 'engine_details', 'feature_details', 'rating', 'start_timestamp', 'video_link', 'price']]
+    #     video_cars_df = video_cars_df.dropna(axis=1, how='all')
         
-        # Create a container for each video's section
-        with st.container(border=True):
-            # --- Video Header ---
-            col1, col2 = st.columns([1, 2])
-            with col1:
-                base_video_url = f"https://www.youtube.com/watch?v={video_id}"
-                st.video(base_video_url)
+    #     # Create a container for each video's section
+    #     with st.container(border=True):
+    #         # --- Video Header ---
+    #         col1, col2 = st.columns([1, 2])
+    #         with col1:
+    #             base_video_url = f"https://www.youtube.com/watch?v={video_id}"
+    #             st.video(base_video_url)
             
-            with col2:
-                st.subheader(first_car['video_title'])
-                st.markdown(f"**Channel:** {first_car['channel_title']}")
-                if pd.notna(first_car['published_at']):
-                    st.markdown(f"**Published:** {first_car['published_at'].strftime('%d %B, %Y')}")
+    #         with col2:
+    #             st.subheader(first_car['video_title'])
+    #             st.markdown(f"**Channel:** {first_car['channel_title']}")
+    #             if pd.notna(first_car['published_at']):
+    #                 st.markdown(f"**Published:** {first_car['published_at'].strftime('%d %B, %Y')}")
                 
-                st.markdown(f"""**Dealer:** {dealer_name} ({dealer_location})
-                            {'📞' + dealer_contact if dealer_contact is not None else ''}
-                            {'📧' + dealer_email if dealer_email is not None else ''}
-                            {'[🌐' + dealer_website + '](' + dealer_website + ')' if dealer_website is not None else ''}""")
+    #             st.markdown(f"""**Dealer:** {dealer_name} ({dealer_location})
+    #                         {'📞' + dealer_contact if dealer_contact is not None else ''}
+    #                         {'📧' + dealer_email if dealer_email is not None else ''}
+    #                         {'[🌐' + dealer_website + '](' + dealer_website + ')' if dealer_website is not None else ''}""")
             
-            st.markdown("##### Cars Featured in This Video:")
+    #         st.markdown("##### Cars Featured in This Video:")
             
-            st.dataframe(
-                video_cars_df,
-                column_config={
-                    'car_oem': st.column_config.TextColumn("Brand"),
-                    'model': st.column_config.TextColumn("Model"),
-                    'variant': st.column_config.TextColumn("Variant"),
-                    'price_lakhs': st.column_config.TextColumn("Price (lakhs)"),
-                    'colour': st.column_config.TextColumn("Colour"),
-                    'price': st.column_config.TextColumn("Price (raw)"),
-                    'odometer': st.column_config.TextColumn("Odometer (km)"),
-                    'year': st.column_config.TextColumn("Year"),
-                    'service_record': st.column_config.TextColumn("Service Record"),
-                    'frame_type': st.column_config.TextColumn("Frame Type"),
-                    'transmission_type': st.column_config.TextColumn("Transmission Type"),
-                    'fuel_type': st.column_config.TextColumn("Fuel Type"),
-                    'num_owners': st.column_config.TextColumn("Number of Owners"),
-                    'rto': st.column_config.TextColumn("RTO"),
-                    'city': st.column_config.TextColumn("City"),
-                    'engine_details': st.column_config.TextColumn("Engine Details"),
-                    'feature_details': st.column_config.TextColumn("Feature Details"),
-                    'rating': st.column_config.TextColumn("Rating"),
-                    'start_timestamp': st.column_config.TextColumn("Start Timestamp"),
-                    'video_link': st.column_config.LinkColumn("Video Link", help="Link to the YouTube video"),
-                },
-                hide_index=True,
-                use_container_width=True,
-            )
+    #         st.dataframe(
+    #             video_cars_df,
+    #             column_config={
+    #                 'car_oem': st.column_config.TextColumn("Brand"),
+    #                 'model': st.column_config.TextColumn("Model"),
+    #                 'variant': st.column_config.TextColumn("Variant"),
+    #                 'price_lakhs': st.column_config.TextColumn("Price (lakhs)"),
+    #                 'colour': st.column_config.TextColumn("Colour"),
+    #                 'price': st.column_config.TextColumn("Price (raw)"),
+    #                 'odometer': st.column_config.TextColumn("Odometer (km)"),
+    #                 'year': st.column_config.TextColumn("Year"),
+    #                 'service_record': st.column_config.TextColumn("Service Record"),
+    #                 'frame_type': st.column_config.TextColumn("Frame Type"),
+    #                 'transmission_type': st.column_config.TextColumn("Transmission Type"),
+    #                 'fuel_type': st.column_config.TextColumn("Fuel Type"),
+    #                 'num_owners': st.column_config.TextColumn("Number of Owners"),
+    #                 'rto': st.column_config.TextColumn("RTO"),
+    #                 'city': st.column_config.TextColumn("City"),
+    #                 'engine_details': st.column_config.TextColumn("Engine Details"),
+    #                 'feature_details': st.column_config.TextColumn("Feature Details"),
+    #                 'rating': st.column_config.TextColumn("Rating"),
+    #                 'start_timestamp': st.column_config.TextColumn("Start Timestamp"),
+    #                 'video_link': st.column_config.LinkColumn("Video Link", help="Link to the YouTube video"),
+    #             },
+    #             hide_index=True,
+    #             use_container_width=True,
+    #         )
+    display_df = filtered_df.copy()
+    display_df['price_lakhs'] = display_df['price_numeric'] / 100000.0
+    display_df['price_lakhs'] = display_df['price_lakhs'].apply(lambda x: f"₹{x:.2f} Lakhs" if x >= 0.1 else "N/A")
+    
+    # Select and order columns for display
+    columns_to_display = [
+        'car_oem', 'model', 'variant', 'price_lakhs', 'colour', 'odometer', 
+        'year', 'service_record', 'frame_type', 'transmission_type', 'fuel_type', 
+        'num_owners', 'rto', 'city', 'engine_details', 'feature_details', 
+        'rating', 'dealer_name', 'dealer_location', 'dealer_contact',
+        'video_link', 'published_at'
+    ]
+    
+    display_df = display_df[columns_to_display].dropna(axis=1, how='all')
+    
+    st.dataframe(
+        display_df,
+        column_config={
+            'car_oem': st.column_config.TextColumn("Brand"),
+            'model': st.column_config.TextColumn("Model"),
+            'variant': st.column_config.TextColumn("Variant"),
+            'price_lakhs': st.column_config.TextColumn("Price (lakhs)"),
+            'colour': st.column_config.TextColumn("Colour"),
+            'odometer': st.column_config.TextColumn("Odometer (km)"),
+            'year': st.column_config.TextColumn("Year"),
+            'service_record': st.column_config.TextColumn("Service Record"),
+            'frame_type': st.column_config.TextColumn("Frame Type"),
+            'transmission_type': st.column_config.TextColumn("Transmission Type"),
+            'fuel_type': st.column_config.TextColumn("Fuel Type"),
+            'num_owners': st.column_config.TextColumn("Number of Owners"),
+            'rto': st.column_config.TextColumn("RTO"),
+            'city': st.column_config.TextColumn("City"),
+            'engine_details': st.column_config.TextColumn("Engine Details"),
+            'feature_details': st.column_config.TextColumn("Feature Details"),
+            'rating': st.column_config.TextColumn("Rating"),
+            'dealer_name': st.column_config.TextColumn("Dealer Name"),
+            'dealer_location': st.column_config.TextColumn("Dealer Location"),
+            'dealer_contact': st.column_config.TextColumn("Dealer Contact"),
+            'video_link': st.column_config.LinkColumn("Video Link"),
+            'published_at': st.column_config.DateColumn("Published Date"),
+        },
+        hide_index=True,
+        use_container_width=True,
+    )
 
