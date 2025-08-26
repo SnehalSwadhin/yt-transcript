@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import libsql
 import os
@@ -137,7 +136,7 @@ if selected_models:
 if selected_locations:
     filtered_df = filtered_df[filtered_df['dealer_location'].isin(selected_locations)]
 
-components.html(GA_SCRIPT, height=0, width=0)
+st.markdown(GA_SCRIPT, unsafe_allow_html=True)
 
 # --- Main Page Display ---
 st.title("🚗 Second Hand Car Listings - Bangalore")
