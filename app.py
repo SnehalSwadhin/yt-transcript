@@ -1,9 +1,13 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import libsql
 import os
 import dotenv
 from database import initialize_db
+import uuid, time, requests
+import extra_streamlit_components as stx
+import datetime
 
 dotenv.load_dotenv()
 
@@ -11,11 +15,12 @@ DB_URL = os.environ.get("TURSO_DATABASE_URL")
 DB_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
 
 GA_MEASUREMENT_ID  = os.environ.get("GA_MEASUREMENT_ID")  # Replace with your actual Measurement ID
+API_SECRET = st.secrets["GA4_API_SECRET"]
 
 # GA script
 GA_SCRIPT = f"""
 <!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id={GA_MEASUREMENT_ID }"></script>
+<script async src="https://www.googletagmanager.com/gtag/js?id={GA_MEASUREMENT_ID}"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){{dataLayer.push(arguments);}}
@@ -25,6 +30,48 @@ GA_SCRIPT = f"""
 """
 
 initialize_db()
+
+def get_client_id():
+    cookie_manager = stx.CookieManager()
+    cid = cookie_manager.get("cid")
+    if not cid:
+        cid = str(uuid.uuid4())
+        cookie_manager.set("cid", cid, expires_at=datetime.datetime.now() + datetime.timedelta(days=365))
+    return cid
+
+# Stable-ish IDs for a Streamlit session (improve with cookies below)
+if "client_id" not in st.session_state:
+    st.session_state.client_id = get_client_id()
+if "session_id" not in st.session_state:
+    st.session_state.session_id = int(time.time())
+
+def ga4_event(name: str, params: dict | None = None):
+    url = f"https://www.google-analytics.com/mp/collect?measurement_id={GA_MEASUREMENT_ID}&api_secret={API_SECRET}"
+    payload = {
+        "client_id": st.session_state.client_id,
+        "events": [{
+            "name": name,
+            "params": {
+                **(params or {}),
+                "session_id": st.session_state.session_id,
+                "engagement_time_msec": 100
+            },
+        }],
+    }
+    try:
+        requests.post(url, json=payload, timeout=5)
+    except Exception:
+        pass  # keep your app resilient
+
+# Send one page_view per session
+if "pv_sent" not in st.session_state:
+    ga4_event("page_view", {
+        "page_title": "Home",
+        "page_location": "https://yt-scrapper-cars-bengaluru.streamlit.app/",
+        # Uncomment for DebugView while testing:
+        # "debug_mode": 1
+    })
+    st.session_state.pv_sent = True
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -136,7 +183,7 @@ if selected_models:
 if selected_locations:
     filtered_df = filtered_df[filtered_df['dealer_location'].isin(selected_locations)]
 
-st.markdown(GA_SCRIPT, unsafe_allow_html=True)
+components.html(GA_SCRIPT, height=0, width=0)
 
 # --- Main Page Display ---
 st.title("🚗 Second Hand Car Listings - Bangalore")
