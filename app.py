@@ -11,24 +11,21 @@ dotenv.load_dotenv()
 DB_URL = os.environ.get("TURSO_DATABASE_URL")
 DB_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
 
-GA_ID = os.environ.get("GA_MEASUREMENT_ID")  # Replace with your actual Measurement ID
+GA_MEASUREMENT_ID  = os.environ.get("GA_MEASUREMENT_ID")  # Replace with your actual Measurement ID
 
-GA_SCRIPT = f"""<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id={GA_ID}"></script>
+# GA script
+GA_SCRIPT = f"""
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id={GA_MEASUREMENT_ID }"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){{dataLayer.push(arguments);}}
   gtag('js', new Date());
-
-  gtag('config', '{GA_ID}');
-</script>"""
-
-def inject_ga():
-    """Injects the Google Analytics script into the Streamlit app's HTML."""
-    components.html(GA_SCRIPT, height=0)
+  gtag('config', '{GA_MEASUREMENT_ID}');
+</script>
+"""
 
 initialize_db()
-inject_ga()
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -139,6 +136,8 @@ if selected_models:
 
 if selected_locations:
     filtered_df = filtered_df[filtered_df['dealer_location'].isin(selected_locations)]
+
+components.html(GA_SCRIPT, height=0, width=0)
 
 # --- Main Page Display ---
 st.title("🚗 Second Hand Car Listings - Bangalore")
