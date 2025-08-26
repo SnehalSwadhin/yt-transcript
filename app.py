@@ -15,7 +15,7 @@ DB_URL = os.environ.get("TURSO_DATABASE_URL")
 DB_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
 
 GA_MEASUREMENT_ID  = os.environ.get("GA_MEASUREMENT_ID")  # Replace with your actual Measurement ID
-API_SECRET = st.secrets["GA4_API_SECRET"]
+API_SECRET = os.environ.get("GA4_API_SECRET")
 
 # GA script
 GA_SCRIPT = f"""
